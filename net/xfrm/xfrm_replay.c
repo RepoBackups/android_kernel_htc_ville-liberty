@@ -34,11 +34,11 @@ u32 xfrm_replay_seqhi(struct xfrm_state *x, __be32 net_seq)
 	bottom = replay_esn->seq - replay_esn->replay_window + 1;
 
 	if (likely(replay_esn->seq >= replay_esn->replay_window - 1)) {
-		
+		/* A. same subspace */
 		if (unlikely(seq < bottom))
 			seq_hi++;
 	} else {
-		
+		/* B. window spans two subspaces */
 		if (unlikely(seq >= bottom))
 			seq_hi--;
 	}
@@ -49,6 +49,15 @@ u32 xfrm_replay_seqhi(struct xfrm_state *x, __be32 net_seq)
 static void xfrm_replay_notify(struct xfrm_state *x, int event)
 {
 	struct km_event c;
+	/* we send notify messages in case
+	 *  1. we updated on of the sequence numbers, and the seqno difference
+	 *     is at least x->replay_maxdiff, in this case we also update the
+	 *     timeout of our timer function
+	 *  2. if x->replay_maxage has elapsed since last update,
+	 *     and there were changes
+	 *
+	 *  The state structure must be locked!
+	 */
 
 	switch (event) {
 	case XFRM_REPLAY_UPDATE:
@@ -279,6 +288,15 @@ static void xfrm_replay_notify_bmp(struct xfrm_state *x, int event)
 	struct xfrm_replay_state_esn *replay_esn = x->replay_esn;
 	struct xfrm_replay_state_esn *preplay_esn = x->preplay_esn;
 
+	/* we send notify messages in case
+	 *  1. we updated on of the sequence numbers, and the seqno difference
+	 *     is at least x->replay_maxdiff, in this case we also update the
+	 *     timeout of our timer function
+	 *  2. if x->replay_maxage has elapsed since last update,
+	 *     and there were changes
+	 *
+	 *  The state structure must be locked!
+	 */
 
 	switch (event) {
 	case XFRM_REPLAY_UPDATE:
@@ -365,11 +383,11 @@ static int xfrm_replay_check_esn(struct xfrm_state *x,
 	diff = top - seq;
 
 	if (likely(top >= wsize - 1)) {
-		
+		/* A. same subspace */
 		if (likely(seq > top) || seq < bottom)
 			return 0;
 	} else {
-		
+		/* B. window spans two subspaces */
 		if (likely(seq > top && seq < bottom))
 			return 0;
 		if (seq >= bottom)
@@ -400,6 +418,18 @@ err_replay:
 err:
 	xfrm_audit_state_replay(x, skb, net_seq);
 	return -EINVAL;
+}
+
+static int xfrm_replay_recheck_esn(struct xfrm_state *x,
+				   struct sk_buff *skb, __be32 net_seq)
+{
+	if (unlikely(XFRM_SKB_CB(skb)->seq.input.hi !=
+		     htonl(xfrm_replay_seqhi(x, net_seq)))) {
+			x->stats.replay_window++;
+			return -EINVAL;
+	}
+
+	return xfrm_replay_check_esn(x, skb, net_seq);
 }
 
 static void xfrm_replay_advance_esn(struct xfrm_state *x, __be32 net_seq)
@@ -461,6 +491,7 @@ static void xfrm_replay_advance_esn(struct xfrm_state *x, __be32 net_seq)
 static struct xfrm_replay xfrm_replay_legacy = {
 	.advance	= xfrm_replay_advance,
 	.check		= xfrm_replay_check,
+	.recheck	= xfrm_replay_check,
 	.notify		= xfrm_replay_notify,
 	.overflow	= xfrm_replay_overflow,
 };
@@ -468,6 +499,7 @@ static struct xfrm_replay xfrm_replay_legacy = {
 static struct xfrm_replay xfrm_replay_bmp = {
 	.advance	= xfrm_replay_advance_bmp,
 	.check		= xfrm_replay_check_bmp,
+	.recheck	= xfrm_replay_check_bmp,
 	.notify		= xfrm_replay_notify_bmp,
 	.overflow	= xfrm_replay_overflow_bmp,
 };
@@ -475,6 +507,7 @@ static struct xfrm_replay xfrm_replay_bmp = {
 static struct xfrm_replay xfrm_replay_esn = {
 	.advance	= xfrm_replay_advance_esn,
 	.check		= xfrm_replay_check_esn,
+	.recheck	= xfrm_replay_recheck_esn,
 	.notify		= xfrm_replay_notify_bmp,
 	.overflow	= xfrm_replay_overflow_esn,
 };

@@ -1,3 +1,13 @@
+/*
+ * INET		An implementation of the TCP/IP protocol suite for the LINUX
+ *		operating system.  INET is implemented using the  BSD Socket
+ *		interface as the means of communication with the user level.
+ *
+ *		The options processing module for ip.c
+ *
+ * Authors:	A.N.Kuznetsov
+ *
+ */
 
 #define pr_fmt(fmt) "IPv4: " fmt
 
@@ -18,6 +28,16 @@
 #include <net/route.h>
 #include <net/cipso_ipv4.h>
 
+/*
+ * Write options to IP header, record destination address to
+ * source route option, address of outgoing interface
+ * (we should already know it, so that this  function is allowed be
+ * called only after routing decision) and timestamp,
+ * if we originate this datagram.
+ *
+ * daddr is real destination address, next hop is recorded in IP header.
+ * saddr is address of outgoing interface.
+ */
 
 void ip_options_build(struct sk_buff *skb, struct ip_options *opt,
 		      __be32 daddr, struct rtable *rt, int is_frag)
@@ -57,6 +77,14 @@ void ip_options_build(struct sk_buff *skb, struct ip_options *opt,
 	}
 }
 
+/*
+ * Provided (sopt, skb) points to received options,
+ * build in dopt compiled option set appropriate for answering.
+ * i.e. invert SRR option, copy anothers,
+ * and grab room in RR/TS options.
+ *
+ * NOTE: dopt cannot point to skb.
+ */
 
 int ip_options_echo(struct ip_options *dopt, struct sk_buff *skb)
 {
@@ -143,6 +171,9 @@ int ip_options_echo(struct ip_options *dopt, struct sk_buff *skb)
 			memcpy(&faddr, &start[soffset-1], 4);
 			for (soffset-=4, doffset=4; soffset > 3; soffset-=4, doffset+=4)
 				memcpy(&dptr[doffset-1], &start[soffset-1], 4);
+			/*
+			 * RFC1812 requires to fix illegal source routes.
+			 */
 			if (memcmp(&ip_hdr(skb)->saddr,
 				   &start[soffset + 3], 4) == 0)
 				doffset -= 4;
@@ -173,6 +204,11 @@ int ip_options_echo(struct ip_options *dopt, struct sk_buff *skb)
 	return 0;
 }
 
+/*
+ *	Options "fragmenting", just fill options not
+ *	allowed in fragments with NOOPs.
+ *	Simple and stupid 8), but the most efficient way.
+ */
 
 void ip_options_fragment(struct sk_buff * skb)
 {
@@ -205,6 +241,11 @@ void ip_options_fragment(struct sk_buff * skb)
 	opt->ts_needtime = 0;
 }
 
+/*
+ * Verify options and fill pointers in struct options.
+ * Caller should clear *opt, and set opt->data.
+ * If opt == NULL, then skb->data should point to IP header.
+ */
 
 int ip_options_compile(struct net *net,
 		       struct ip_options * opt, struct sk_buff * skb)
@@ -238,6 +279,10 @@ int ip_options_compile(struct net *net,
 			optptr++;
 			continue;
 		}
+		if (unlikely(l < 2)) {
+			pp_ptr = optptr;
+			goto error;
+		}
 		optlen = optptr[1];
 		if (optlen<2 || optlen>l) {
 			pp_ptr = optptr;
@@ -254,7 +299,7 @@ int ip_options_compile(struct net *net,
 				pp_ptr = optptr + 2;
 				goto error;
 			}
-			
+			/* NB: cf RFC-1812 5.2.4.1 */
 			if (opt->srr) {
 				pp_ptr = optptr;
 				goto error;
@@ -319,7 +364,6 @@ int ip_options_compile(struct net *net,
 				}
 				switch (optptr[3]&0xF) {
 				      case IPOPT_TS_TSONLY:
-					opt->ts = optptr - iph;
 					if (skb)
 						timeptr = &optptr[optptr[2]-1];
 					opt->ts_needtime = 1;
@@ -330,7 +374,6 @@ int ip_options_compile(struct net *net,
 						pp_ptr = optptr + 2;
 						goto error;
 					}
-					opt->ts = optptr - iph;
 					if (rt)  {
 						memcpy(&optptr[optptr[2]-1], &rt->rt_spec_dst, 4);
 						timeptr = &optptr[optptr[2]+3];
@@ -344,7 +387,6 @@ int ip_options_compile(struct net *net,
 						pp_ptr = optptr + 2;
 						goto error;
 					}
-					opt->ts = optptr - iph;
 					{
 						__be32 addr;
 						memcpy(&addr, &optptr[optptr[2]-1], 4);
@@ -377,12 +419,12 @@ int ip_options_compile(struct net *net,
 					pp_ptr = optptr + 3;
 					goto error;
 				}
-				opt->ts = optptr - iph;
 				if (skb) {
 					optptr[3] = (optptr[3]&0xF)|((overflow+1)<<4);
 					opt->is_changed = 1;
 				}
 			}
+			opt->ts = optptr - iph;
 			break;
 		      case IPOPT_RA:
 			if (optlen < 4) {
@@ -428,6 +470,9 @@ error:
 }
 EXPORT_SYMBOL(ip_options_compile);
 
+/*
+ *	Undo all the changes done by ip_options_compile().
+ */
 
 void ip_options_undo(struct ip_options * opt)
 {
@@ -593,7 +638,7 @@ int ip_options_rcv_srr(struct sk_buff *skb)
 		refdst_drop(orefdst);
 		if (rt2->rt_type != RTN_LOCAL)
 			break;
-		
+		/* Superfast 8) loopback forward */
 		iph->daddr = nexthop;
 		opt->is_changed = 1;
 	}

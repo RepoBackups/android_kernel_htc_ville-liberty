@@ -309,17 +309,11 @@ config WCNSS_MEM_PRE_ALLOC
 	---help---
 	  Pre-allocate memory for the WLAN driver module
 
-config QUALCOMM_WLAN
-        tristate "Qualcomm wireless cards support"
-
-        ---help---
-          This module adds support for wireless adapters based on
-          Qualcomm chipset.
-
 source "drivers/net/wireless/ath/Kconfig"
 source "drivers/net/wireless/b43/Kconfig"
 source "drivers/net/wireless/b43legacy/Kconfig"
 source "drivers/net/wireless/bcmdhd/Kconfig"
+source "drivers/net/wireless/bcmdhd_4335_mcc/Kconfig"
 source "drivers/net/wireless/brcm80211/Kconfig"
 source "drivers/net/wireless/hostap/Kconfig"
 source "drivers/net/wireless/ipw2x00/Kconfig"
@@ -335,9 +329,5 @@ source "drivers/net/wireless/wl1251/Kconfig"
 source "drivers/net/wireless/wl12xx/Kconfig"
 source "drivers/net/wireless/zd1211rw/Kconfig"
 source "drivers/net/wireless/mwifiex/Kconfig"
-source "drivers/net/wireless/bcmdhd_4330/Kconfig"
-source "drivers/net/wireless/bcmdhd_4334/Kconfig"
-source "drivers/net/wireless/bcmdhd_4335/Kconfig"
-source "drivers/net/wireless/bcmdhd_4335_mcc/Kconfig"
 
 endif # WLAN

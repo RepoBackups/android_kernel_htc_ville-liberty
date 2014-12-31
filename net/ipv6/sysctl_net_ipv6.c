@@ -1,3 +1,9 @@
+/*
+ * sysctl_net_ipv6.c: sysctl interface to net IPV6 subsystem.
+ *
+ * Changes:
+ * YOSHIFUJI Hideaki @USAGI:	added icmp sysctl table.
+ */
 
 #include <linux/mm.h>
 #include <linux/sysctl.h>
@@ -38,6 +44,13 @@ static ctl_table ipv6_table_template[] = {
 	{
 		.procname	= "bindv6only",
 		.data		= &init_net.ipv6.sysctl.bindv6only,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec
+	},
+	{
+		.procname	= "fwmark_reflect",
+		.data		= &init_net.ipv6.sysctl.fwmark_reflect,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec

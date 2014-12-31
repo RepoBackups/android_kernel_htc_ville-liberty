@@ -23,6 +23,8 @@ struct fib_rule {
 	struct fib_rule __rcu	*ctarget;
 	char			iifname[IFNAMSIZ];
 	char			oifname[IFNAMSIZ];
+	uid_t			uid_start;
+	uid_t			uid_end;
 	struct rcu_head		rcu;
 	struct net *		fr_net;
 };
@@ -60,6 +62,8 @@ struct fib_rules_ops {
 	u32			(*default_pref)(struct fib_rules_ops *ops);
 	size_t			(*nlmsg_payload)(struct fib_rule *);
 
+	/* Called after modifications to the rules set, must flush
+	 * the route cache if one exists. */
 	void			(*flush_cache)(struct fib_rules_ops *ops);
 
 	int			nlgroup;
@@ -77,7 +81,9 @@ struct fib_rules_ops {
 	[FRA_FWMARK]	= { .type = NLA_U32 }, \
 	[FRA_FWMASK]	= { .type = NLA_U32 }, \
 	[FRA_TABLE]     = { .type = NLA_U32 }, \
-	[FRA_GOTO]	= { .type = NLA_U32 }
+	[FRA_GOTO]	= { .type = NLA_U32 }, \
+	[FRA_UID_START]	= { .type = NLA_U32 }, \
+	[FRA_UID_END]	= { .type = NLA_U32 }
 
 static inline void fib_rule_get(struct fib_rule *rule)
 {
