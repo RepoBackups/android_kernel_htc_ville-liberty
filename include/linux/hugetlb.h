@@ -24,6 +24,7 @@ struct hugepage_subpool *hugepage_new_subpool(long nr_blocks);
 void hugepage_put_subpool(struct hugepage_subpool *spool);
 
 int PageHuge(struct page *page);
+int PageHeadHuge(struct page *page_head);
 
 void reset_vma_resv_huge_pages(struct vm_area_struct *vma);
 int hugetlb_sysctl_handler(struct ctl_table *, int, void __user *, size_t *, loff_t *);
@@ -61,6 +62,7 @@ extern const unsigned long hugetlb_zero, hugetlb_infinity;
 extern int sysctl_hugetlb_shm_group;
 extern struct list_head huge_boot_pages;
 
+/* arch callbacks */
 
 pte_t *huge_pte_alloc(struct mm_struct *mm,
 			unsigned long addr, unsigned long sz);
@@ -77,9 +79,14 @@ int pud_huge(pud_t pmd);
 void hugetlb_change_protection(struct vm_area_struct *vma,
 		unsigned long address, unsigned long end, pgprot_t newprot);
 
-#else 
+#else /* !CONFIG_HUGETLB_PAGE */
 
 static inline int PageHuge(struct page *page)
+{
+	return 0;
+}
+
+static inline int PageHeadHuge(struct page *page_head)
 {
 	return 0;
 }
@@ -118,19 +125,27 @@ static inline void copy_huge_page(struct page *dst, struct page *src)
 
 #define hugetlb_change_protection(vma, address, end, newprot)
 
-#endif 
+#endif /* !CONFIG_HUGETLB_PAGE */
 
 #define HUGETLB_ANON_FILE "anon_hugepage"
 
 enum {
+	/*
+	 * The file will be used as an shm file so shmfs accounting rules
+	 * apply
+	 */
 	HUGETLB_SHMFS_INODE     = 1,
+	/*
+	 * The file is being created on the internal vfs mount and shmfs
+	 * accounting rules do not apply
+	 */
 	HUGETLB_ANONHUGE_INODE  = 2,
 };
 
 #ifdef CONFIG_HUGETLBFS
 struct hugetlbfs_sb_info {
-	long	max_inodes;   
-	long	free_inodes;  
+	long	max_inodes;   /* inodes allowed */
+	long	free_inodes;  /* inodes free */
 	spinlock_t	stat_lock;
 	struct hstate *hstate;
 	struct hugepage_subpool *spool;
@@ -143,8 +158,7 @@ static inline struct hugetlbfs_sb_info *HUGETLBFS_SB(struct super_block *sb)
 
 extern const struct file_operations hugetlbfs_file_operations;
 extern const struct vm_operations_struct hugetlb_vm_ops;
-struct file *hugetlb_file_setup(const char *name, unsigned long addr,
-				size_t size, vm_flags_t acct,
+struct file *hugetlb_file_setup(const char *name, size_t size, vm_flags_t acct,
 				struct user_struct **user, int creat_flags);
 
 static inline int is_file_hugepages(struct file *file)
@@ -157,27 +171,28 @@ static inline int is_file_hugepages(struct file *file)
 	return 0;
 }
 
-#else 
+#else /* !CONFIG_HUGETLBFS */
 
 #define is_file_hugepages(file)			0
 static inline struct file *
-hugetlb_file_setup(const char *name, unsigned long addr, size_t size,
-		vm_flags_t acctflag, struct user_struct **user, int creat_flags)
+hugetlb_file_setup(const char *name, size_t size, vm_flags_t acctflag,
+		struct user_struct **user, int creat_flags)
 {
 	return ERR_PTR(-ENOSYS);
 }
 
-#endif 
+#endif /* !CONFIG_HUGETLBFS */
 
 #ifdef HAVE_ARCH_HUGETLB_UNMAPPED_AREA
 unsigned long hugetlb_get_unmapped_area(struct file *file, unsigned long addr,
 					unsigned long len, unsigned long pgoff,
 					unsigned long flags);
-#endif 
+#endif /* HAVE_ARCH_HUGETLB_UNMAPPED_AREA */
 
 #ifdef CONFIG_HUGETLB_PAGE
 
 #define HSTATE_NAME_LEN 32
+/* Defines one hugetlb page size */
 struct hstate {
 	int next_nid_to_alloc;
 	int next_nid_to_free;
@@ -206,6 +221,7 @@ struct huge_bootmem_page {
 
 struct page *alloc_huge_page_node(struct hstate *h, int nid);
 
+/* arch callback */
 int __init alloc_bootmem_huge_page(struct hstate *h);
 
 void __init hugetlb_add_hstate(unsigned order);
@@ -283,7 +299,18 @@ static inline unsigned hstate_index_to_shift(unsigned index)
 	return hstates[index].order + PAGE_SHIFT;
 }
 
-#else
+pgoff_t __basepage_index(struct page *page);
+
+/* Return page->index in PAGE_SIZE units */
+static inline pgoff_t basepage_index(struct page *page)
+{
+	if (!PageCompound(page))
+		return page->index;
+
+	return __basepage_index(page);
+}
+
+#else	/* CONFIG_HUGETLB_PAGE */
 struct hstate {};
 #define alloc_huge_page_node(h, nid) NULL
 #define alloc_bootmem_huge_page(h) NULL
@@ -301,6 +328,11 @@ static inline unsigned int pages_per_huge_page(struct hstate *h)
 	return 1;
 }
 #define hstate_index_to_shift(index) 0
+
+static inline pgoff_t basepage_index(struct page *page)
+{
+	return page->index;
+}
 #endif
 
-#endif 
+#endif /* _LINUX_HUGETLB_H */
