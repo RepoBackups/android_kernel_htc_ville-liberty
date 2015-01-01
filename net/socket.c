@@ -1326,7 +1326,7 @@ EXPORT_SYMBOL(sock_create_kern);
 SYSCALL_DEFINE3(socket, int, family, int, type, int, protocol)
 {
 	int retval;
-	struct socket *sock = NULL;
+	struct socket *sock;
 	int flags;
 
 	/* Check the SOCK_* constants for consistency.  */
@@ -1367,7 +1367,7 @@ out_release:
 SYSCALL_DEFINE4(socketpair, int, family, int, type, int, protocol,
 		int __user *, usockvec)
 {
-	struct socket *sock1 = NULL, *sock2;
+	struct socket *sock1, *sock2;
 	int fd1, fd2, err;
 	struct file *newfile1, *newfile2;
 	int flags;
@@ -1907,10 +1907,6 @@ static int copy_msghdr_from_user(struct msghdr *kmsg,
 {
 	if (copy_from_user(kmsg, umsg, sizeof(struct msghdr)))
 		return -EFAULT;
-
-	if (kmsg->msg_namelen < 0)
-		return -EINVAL;
-
 	if (kmsg->msg_namelen > sizeof(struct sockaddr_storage))
 		kmsg->msg_namelen = sizeof(struct sockaddr_storage);
 	return 0;

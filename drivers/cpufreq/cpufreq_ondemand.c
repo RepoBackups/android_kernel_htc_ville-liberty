@@ -1104,7 +1104,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	unsigned int max_load_other_cpu = 0;
 	struct cpufreq_policy *policy;
 	unsigned int j, prev_load = 0, freq_next;
-#ifdef CONFIG_CPU_FREQ_GOV_ONDEMAND_2_PHASE
+#ifdef CONFIG_NON_EXISTENT
 	static unsigned int phase = 0;
 	static unsigned int counter = 0;
 	unsigned int nr_cpus;
